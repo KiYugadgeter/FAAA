@@ -21,6 +21,7 @@ db 0 ; reserved;
 db 0x29; boot flag
 dd 0xbeef;
 db "BOOT       "; Volume label;
+
 db "FAT16   "; FAT type
 
 times 510 - ($ - $$) db 0x00
@@ -28,15 +29,22 @@ dw 0xaa55
 db 0xf0, 0xff
 dw 0xffff
 dw 0xffff
+dw 0xffff
+dw 0xffff
+dw 0xffff
 
 times fat2_start - ($-$$) db 0x00
 db 0xf0, 0xff
+dw 0xffff
+dw 0xffff
+dw 0xffff
 dw 0xffff
 dw 0xffff
 times (fat2_start+fat_size) - ($-$$) db 0x00
 ; ROOT_START
 FAT_ROOT:
 db "BOOT    ", "DSK"
+
 db 0x28
 db 0x00
 db 0x00
@@ -64,9 +72,45 @@ dw (0 << 9) | (0 << 5) | (1)
 dw 2
 dd FILE.end - FILE
 
+db "DIR1    ","   "
+
+db 0x10
+db 0x00
+db 0
+dw (0 << 11) | (0 << 5) | (0/2)
+dw (0 << 9) | (0 << 5) | (1)
+dw (0 << 9) | (0 << 5) | (1)
+dw 0x0000;
+dw (0 << 11) | (0 << 5) | (0/2)
+dw (0 << 9) | (0 << 5) | (1)
+dw 3;
+dd DIRENTRY.end - DIRENTRY
+
+
 times (fat2_start+fat_size) + root_size - ($-$$) db 0x00
 
 FILE: db "HELLO"
 .end db 0
 align 512, db 0x00
-times (512 * 63) db 0x00
+
+;sector 3;
+DIRENTRY: db "TEXT2   ","TXT"
+
+db 0x20
+db 0x00
+db 0
+dw (0 << 11) | (0 << 5) | (0/2)
+dw (0 << 9) | (0 << 5) | (1)
+dw (0 << 9) | (0 << 5) | (1)
+dw 0x0000;
+dw (0 << 11) | (0 << 5) | (0/2)
+dw (0 << 9) | (0 << 5) | (1)
+dw 4
+.end dd FILE2.end - FILE2
+align 512, db 0x00;
+
+FILE2 db "Goodbye"
+.end db 0
+align 512, db 0x00
+
+times (512 * 62) db 0x00

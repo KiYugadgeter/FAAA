@@ -1,10 +1,15 @@
 fsys: fsys.cpp fsys.hpp
 	g++ -g -o fsys fsys.cpp
 
-
-.PHONY: sanitize
-sanitize: 
-	g++ -fsanitize=address -g -o sani fsys.cpp
+fs: fs.nasm
+	nasm -o fs -f bin fs.nasm
 
 
+.PHONY: debug
+debug: 
+	g++ -g -o fsys fsys.cpp
+
+.PHONY: clean
+clean:
+	rm fs fsys
 

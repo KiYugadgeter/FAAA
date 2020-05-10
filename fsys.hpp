@@ -8,6 +8,8 @@
 #include <cstring>
 #include <exception>
 #include <stdexcept>
+#include <cmath>
+#include <algorithm>
 
 struct DirectoryEntry {
     char filename[8];
@@ -64,6 +66,7 @@ struct BPB {
 
 
 void parse_directory_entry(uint8_t* ar, DirectoryEntry* de);
+int parse_path(char* path, char* filename, char* suffix);
 
 class FAT16 {
     public:
@@ -78,6 +81,9 @@ class FAT16 {
         FileHandle open(char *filename);
         void read_cluster(char* buf, uint16_t cluster_num);
         std::fstream fst;
+        DirectoryEntry read_subdir(char *dirname, DirectoryEntry* dentry);
+        uint16_t get_next_cluster_num(uint16_t cluster_num);
+        int64_t read_path(char* pathname, DirectoryEntry *de, uint32_t entry_count, DirectoryEntry *out, bool is_root);
     private:
         uint8_t directory_entry_buffer[32];
         int namecmp(DirectoryEntry *de, char *basename, char *suffix);

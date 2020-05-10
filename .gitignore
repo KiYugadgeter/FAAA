@@ -1,0 +1,5 @@
+test/
+*.lst
+GPATH
+GRTAGS
+GTAGS
