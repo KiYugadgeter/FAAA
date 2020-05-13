@@ -2,6 +2,8 @@ bpd_end equ 512
 fat_size equ (512*256)
 fat2_start equ (512+fat_size)
 root_size equ (1024 * 16)
+
+
 times 3 db 0x90
 db "MSWIN4.0"
 dw 512
@@ -95,7 +97,6 @@ align 512, db 0x00
 
 ;sector 3;
 DIRENTRY: db "TEXT2   ","TXT"
-
 db 0x20
 db 0x00
 db 0

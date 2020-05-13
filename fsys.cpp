@@ -15,7 +15,6 @@ int FileHandle::read(char* b, size_t n) {
     size_t i = 0;
     size_t p = current_pos % (fat->bpb.cluster_length * fat->bpb.sector_length);
     size_t c = (fat->bpb.cluster_length * fat->bpb.sector_length) - p;
-    std::cout << current_cluster << std::endl;
     fat->read_cluster((char*)buf, current_cluster);
     if (n < c) {
         std::memcpy(b, buf+p, n);
@@ -118,7 +117,8 @@ void parse_directory_entry(uint8_t* ar, DirectoryEntry* de) { // independ functi
 
 FAT16::FAT16(std::string filename) : filename(filename) {
     fst = std::fstream(filename, std::ios_base::binary | std::ios_base::in | std::ios_base::out);
-    fst.read((char*)&bpb, 63);
+    fst.seekg(0);
+    fst.read((char*)&bpb, 61);
     fst.seekg(bpb.preserved_sectors * bpb.sector_length + (bpb.fat_sectors * bpb.sector_length * bpb.fat_count));
     fat_size = bpb.fat_sectors * bpb.sector_length;
     data_start = bpb.preserved_sectors * bpb.sector_length + (bpb.fat_sectors * bpb.sector_length * bpb.fat_count) + (32 * bpb.root_entry_count);
@@ -129,21 +129,22 @@ FAT16::FAT16(std::string filename) : filename(filename) {
     }
 }
 
-int64_t FAT16::read_path(char* pathname, DirectoryEntry *de, uint32_t entry_count, DirectoryEntry *out, bool is_root) {
+int64_t FAT16::read_path(char* pathname, DirectoryEntry *de, uint32_t entry_count, DirectoryEntry *out, bool is_root) { //再帰でクラスターを読んでいく
     char filename[8];
     char suffix[3];
     if (pathname == NULL) {
         out = NULL;
         return -1;
     }
-    if (is_root) {
+    if (is_root) { // is_rootがtrueなら deを無視して、root_directory_entryを使う(rootなので)
         for (int i = 0; i < entry_count; i++) {
             DirectoryEntry d2 = root_directory_entry[i];
             if (parse_path(pathname, filename, suffix) == -1) {
                 throw std::runtime_error("invalid path");
             }
-            if ((d2.attribute == 0x10) && memcmp(filename, d2.filename, 8) == 0 && memcmp(suffix, d2.suffix, 3)) {
-                char *new_path = strtok(NULL, "/");
+            if ((d2.attribute & 0x10) && memcmp(filename, d2.filename, 8) == 0 && memcmp(suffix, d2.suffix, 3) == 0) {
+                std::cout << "directory" << std::endl;
+                char* new_path = strtok(NULL, "/");
                 if (new_path == NULL) {
                     throw std::runtime_error("Not such file or directory");
                 }
@@ -167,15 +168,20 @@ int64_t FAT16::read_path(char* pathname, DirectoryEntry *de, uint32_t entry_coun
         uint32_t cluster_read_num = 0;
         uint32_t cluster_num = std::ceil((long double)table_size / (long double)cluster_size);
         while (cluster_read_num < cluster_num) {
+            std::cout << cluster_index << std::endl;
             read_cluster(temp_buf, cluster_index);
+            for (int k = 0; k < 512; k++) {
+                std::printf("%d:%x\n", k, temp_buf[k]);
+            }
+            std::cout << std::endl;
             for (int i = 0; i < cluster_size; i+=32) {
+                char filename[8];
+                char suffix[3];
                 memcpy(temp_buf+i, d_buf, 32);
                 DirectoryEntry d4;
                 parse_directory_entry((uint8_t *)d_buf, &d4);
-                char filename[11];
-                char suffix[3];
                 parse_path(pathname, filename, suffix);
-                if (d4.filename == filename && d4.attribute == 0x10) {
+                if (d4.attribute == 0x10 && memcmp(d4.filename, filename, 8) == 0) {
                     char *new_path = strtok(NULL, "/");
                     return read_path(new_path, &d4, d4.filesize/32, out, false);
                 }
@@ -206,17 +212,17 @@ FileHandle FAT16::open(char* path) {
     DirectoryEntry de;
     std::cout << "path=" << path << std::endl;
     int res;
-    char* p = strtok(path, "/");
+    char* p = strtok(path, "/"); // 最初にパスを区切る
     res = read_path(p, root_directory_entry, bpb.root_entry_count, &de, true);
     if (res == -1) {
         std::cout << "something error" << std::endl;
-        throw std::runtime_error("Not such file or directory");
+        throw std::runtime_error("Not such file or directory in open()");
     }
     return FileHandle(de, this);
 }
         
         
-void FAT16::read_cluster(char* buf, uint16_t cluster_num) {
+void FAT16::read_cluster(char* buf, uint16_t cluster_num) { //与えられたクラスター番号のデータを読む
     uint64_t data_start = bpb.sector_length * bpb.preserved_sectors + bpb.fat_sectors * bpb.sector_length * bpb.fat_count + 32 * bpb.root_entry_count;
     fst.seekg(data_start + (bpb.sector_length * bpb.cluster_length)*(cluster_num-2));
     fst.read(buf, bpb.sector_length * bpb.cluster_length);
@@ -233,9 +239,10 @@ int FAT16::namecmp(DirectoryEntry *de, char *basename, char *suffix) {
 
 int main() {
     std::shared_ptr<FAT16> p1(new FAT16("fs"));
-    FileHandle f = p1->open("/DIR1/TEXT2.TXT");
-
+    char *fname = strdup("/DIR1/TEXT2.TXT");
+    FileHandle f = p1->open(fname);
     char t[7];
     f.read(t, 5);
     std::cout << t << std::endl;
+    delete fname;
 }
