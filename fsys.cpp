@@ -38,6 +38,46 @@ int FileHandle::read(char* b, size_t n) {
     return n;
 }
 
+uint32_t FileHandle::write(uint8_t* buf, size_t n) {
+    int32_t write_size = n;
+    size_t cluster_size = fat->bpb.sector_length * fat->bpb.cluster_length;
+    size_t rest_length = cluster_size - (current_pos / cluster_size);
+    size_t j = n < rest_length ? n : rest_length;
+    fat->fst.write((char*)buf, j);
+    current_pos += j;
+    n -= j;
+    if (n <= 0) {
+        return n;
+    }
+    current_cluster = update_cluster_num(current_cluster);
+
+    uint32_t cluster_num = n / cluster_size;
+    for (uint32_t i = 0; i < cluster_num; i++) {
+        fat->fst.seekg(fat->data_start + cluster_size*current_cluster);
+        fat->fst.write((char*)(buf+j+(cluster_size*i)), cluster_size);
+        uint16_t next_cluster = update_cluster_num(current_cluster);
+        if (next_cluster == 0xff) {
+            uint16_t new_cluster = fat->find_empty_cluster();
+            if (new_cluster == -1) {
+                throw std::runtime_error("FULL");
+            }
+            fat->set_cluster_num(current_cluster, new_cluster);
+            current_cluster = new_cluster;
+        }
+        else {
+            current_cluster = next_cluster;
+        }
+    }
+    n -= cluster_num * cluster_size;
+    if (n == 0) {
+        return write_size;
+    }
+    fat->fst.seekg(fat->data_start + cluster_size*current_cluster);
+    n -= cluster_num * cluster_size;
+    fat->fst.write((char*)(buf+j+(cluster_num*cluster_size)), n);
+    return write_size;
+}
+
 uint16_t FileHandle::update_cluster_num(uint16_t index) {
     uint32_t fat_start = (fat->bpb.sector_length * fat->bpb.preserved_sectors);
     fat->fst.seekg(fat_start+(index*2));
@@ -225,6 +265,18 @@ void FAT16::read_cluster(char* buf, uint16_t cluster_num) { //与えられたク
     fst.read(buf, bpb.sector_length * bpb.cluster_length);
 }
 
+int32_t FAT16::find_empty_cluster() {
+    for (uint16_t i = 4; i < fat_size; i += 2) {
+        fst.seekg(fat_start+i);
+        uint16_t n;
+        fst.read((char*)&n, 2);
+        if (n == 0x00) {
+            return i / 2;
+        }
+    }
+    return -1;
+}
+
 int FAT16::namecmp(DirectoryEntry *de, char *basename, char *suffix) {
     int m1 = std::memcmp(de->filename, basename, 8);
     if (m1 != 0) {
@@ -232,6 +284,11 @@ int FAT16::namecmp(DirectoryEntry *de, char *basename, char *suffix) {
     }
     int m2 = std::memcmp(de->suffix, suffix, 3);
     return m2;
+}
+
+void FAT16::set_cluster_num(uint16_t index, uint16_t num) {
+    fst.seekg(fat_start+(index*2));
+    fst.write((char*)&num, 2);
 }
 
 int main() {

@@ -35,6 +35,7 @@ struct FileHandle {
     uint8_t *buf;
     int read(char* b, size_t n);
     uint16_t update_cluster_num(uint16_t index); 
+    uint32_t write(uint8_t* buf, size_t n);
     FileHandle(DirectoryEntry dentry, FAT16* fat);
     ~FileHandle();
 };
@@ -80,6 +81,8 @@ class FAT16 {
         uint32_t fat_start;
         FileHandle open(char *filename);
         void read_cluster(char* buf, uint16_t cluster_num);
+        void set_cluster_num(uint16_t index, uint16_t num);
+        int32_t find_empty_cluster();
         std::fstream fst;
         DirectoryEntry read_subdir(char *dirname, DirectoryEntry* dentry);
         uint16_t get_next_cluster_num(uint16_t cluster_num);
