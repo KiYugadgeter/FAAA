@@ -18,11 +18,10 @@ int FileHandle::read(char* b, size_t n) {
     fat->read_cluster((char*)buf, current_cluster);
     if (n < c) {
         std::memcpy(b, buf+p, n);
+        current_pos += n;
         return n;
     }
-    else {
-        std::memcpy(b, buf+p, c);
-    }
+    std::memcpy(b, buf+p, c);
     i += c;
     current_cluster = update_cluster_num(current_cluster);
     size_t m2 = (current_pos+n - current_pos+c) % (fat->bpb.cluster_length * fat->bpb.sector_length);
@@ -35,6 +34,7 @@ int FileHandle::read(char* b, size_t n) {
         current_cluster = update_cluster_num(current_cluster);
     }
     std::memcpy(b, buf, m2);
+    current_pos += n;
     return n;
 }
 
@@ -76,6 +76,18 @@ uint32_t FileHandle::write(uint8_t* buf, size_t n) {
     n -= cluster_num * cluster_size;
     fat->fst.write((char*)(buf+j+(cluster_num*cluster_size)), n);
     return write_size;
+}
+
+FileHandle* FileHandle::seekg(uint32_t pos) {
+    int k = pos / (fat->bpb.sector_length * fat->bpb.cluster_length);
+    int cluster_num = dentry.head_cluster;
+    for (int i = 0; i < k; i++) {
+        cluster_num = update_cluster_num(cluster_num);
+    }
+    fat->fst.seekg(fat->data_start + (fat->bpb.cluster_length * fat->bpb.sector_length)*cluster_num + pos % (fat->bpb.sector_length * fat->bpb.cluster_length));
+    current_pos = pos;
+    return this;
+
 }
 
 uint16_t FileHandle::update_cluster_num(uint16_t index) {
@@ -298,5 +310,9 @@ int main() {
     char t[7];
     f.read(t, 5);
     std::cout << t << std::endl;
+    f.seekg(2);
+    char y[6];
+    f.read(y, 3);
+    std::cout << y << std::endl;
     delete fname;
 }

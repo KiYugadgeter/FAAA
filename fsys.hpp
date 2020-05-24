@@ -33,10 +33,12 @@ struct FileHandle {
     uint64_t current_pos;
     uint16_t current_cluster;
     uint8_t *buf;
+    uint8_t* head_cluster;
     int read(char* b, size_t n);
     uint16_t update_cluster_num(uint16_t index); 
     uint32_t write(uint8_t* buf, size_t n);
     FileHandle(DirectoryEntry dentry, FAT16* fat);
+    FileHandle* seekg(uint32_t pos);
     ~FileHandle();
 };
 
