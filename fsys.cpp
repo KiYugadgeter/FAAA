@@ -212,17 +212,16 @@ int64_t FAT16::read_path(char* pathname, DirectoryEntry *de, uint32_t entry_coun
     else {
         std::cout << "file in subdir" << std::endl;
         uint16_t cluster_index = de->head_cluster;
-        uint32_t table_size = de->filesize;
+        //uint32_t table_size = de->filesize;
         uint32_t cluster_size = this->bpb.sector_length * this->bpb.cluster_length;
         uint8_t d_buf[32];
+        d_buf[0] = 0x01; // とりあえず先頭に終了を表さない値を入れる。0x01
         char temp_buf[cluster_size];
         uint32_t already_read = 0;
         uint32_t cluster_read_num = 0;
-        uint32_t cluster_num = std::ceil((long double)table_size / (long double)cluster_size);
-        while (cluster_read_num < cluster_num) {
-            std::cout << cluster_index << std::endl;
+        //uint32_t cluster_num = std::ceil((long double)table_size / (long double)cluster_size);
+        while (d_buf[0] != 0x00) {
             read_cluster(temp_buf, cluster_index);
-            std::cout << std::endl;
             for (int i = 0; i < cluster_size; i+=32) {
                 char filename[8];
                 char suffix[3];
@@ -230,6 +229,8 @@ int64_t FAT16::read_path(char* pathname, DirectoryEntry *de, uint32_t entry_coun
                 DirectoryEntry d4;
                 parse_directory_entry((uint8_t *)d_buf, &d4);
                 parse_path(pathname, filename, suffix);
+                if (filename[0] == 0x05)
+                    filename[0] = 0xe5;
                 if (d4.attribute == 0x10 && memcmp(d4.filename, filename, 8) == 0) {
                     char *new_path = strtok(NULL, "/");
                     return read_path(new_path, &d4, d4.filesize/32, out, false);
