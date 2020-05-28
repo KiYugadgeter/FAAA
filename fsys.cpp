@@ -57,7 +57,7 @@ uint32_t FileHandle::write(uint8_t* buf, size_t n) {
         fat->fst.write((char*)(buf+j+(cluster_size*i)), cluster_size);
         uint16_t next_cluster = update_cluster_num(current_cluster);
         if (next_cluster == 0xff) {
-            uint16_t new_cluster = fat->find_empty_cluster();
+            int32_t new_cluster = fat->find_empty_cluster();
             if (new_cluster == -1) {
                 throw std::runtime_error("FULL");
             }
@@ -302,6 +302,90 @@ int FAT16::namecmp(DirectoryEntry *de, char *basename, char *suffix) {
 void FAT16::set_cluster_num(uint16_t index, uint16_t num) {
     fst.seekg(fat_start+(index*2));
     fst.write((char*)&num, 2);
+}
+
+
+
+int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
+    DirectoryEntry de;
+    char filename[8];
+    char suffix[3];
+    uint8_t buf[32];
+    buf[0] = 0x01;
+    uint64_t root_dir_pos = (bpb.sector_length * bpb.preserved_sectors) + bpb.fat_sectors * bpb.sector_length * bpb.fat_count;
+    if (root && in_de == NULL) {
+        int c = bpb.root_entry_count;
+        for (int i = 0; i < c * 32; i+= 32) {
+            fst.seekg(root_dir_pos + i);
+            fst.read((char*)buf, 32);
+            parse_directory_entry(buf, &de);
+            parse_path(path, filename, suffix);
+            if (memcmp(de.filename, filename, 8) == 0 && memcmp(de.suffix, suffix, 3) == 0) {
+                char* p = strtok(path, "/");
+                if (p == NULL) {
+                    fst.seekg(root_dir_pos + i);
+                    uint8_t a = 0;
+                    fst.write((char*)&(a), 1);
+                    del_cluster_chain(de.head_cluster);
+                    return 0;
+                }
+                else {
+                    unlink(p, &de, false);
+                }
+            }
+            throw std::runtime_error("not such file or directory");
+        }
+    }
+    else {
+        parse_path(path, filename, suffix);
+        uint16_t cluster_index = in_de->head_cluster;
+        uint32_t cluster_size = bpb.sector_length * bpb.cluster_length;
+        uint8_t cluster_buf[cluster_size];
+        while (*buf != 0x00) {
+            read_cluster((char*)cluster_buf, cluster_index);
+            for (int i = 0; i < cluster_size; i += 32) {
+                parse_directory_entry(cluster_buf + i, &de);
+                if (de.filename[0] == 0x00) {
+                    break;
+                }
+                parse_path(path, filename, suffix);
+                if (memcmp(de.filename, filename, 8) == 0 && memcmp(de.suffix, suffix, 3) == 0) {
+                    char* p = strtok(path, "/");
+                    if (p == NULL) {
+                        fst.seekg(data_start + cluster_size * cluster_index + i);
+                        int a = 0;
+                        fst.write((char*)&a, 1);
+                        del_cluster_chain(de.head_cluster);
+                        return 0;
+                    }
+                    else {
+                        return unlink(p, &de, false);
+                    }
+                }
+                else {
+                    throw std::runtime_error("not such file or directory");
+                }
+            }
+            if (cluster_index != 0xff) {
+                cluster_index = get_next_cluster_num(cluster_index);
+            }
+            else {
+                throw std::runtime_error("not such file or directory");
+            }
+        }
+
+    }
+}
+
+void FAT16::del_cluster_chain(int num) {
+    while (num != 0xffff) {
+        uint16_t next_num;
+        fst.seekg(fat_start + num*2);
+        fst.read((char*)&next_num, 2);
+        fst.seekg(fat_start+ num * 2);
+        fst.write((char*)0xffff, 2);
+        num = next_num;
+    }
 }
 
 int main() {
