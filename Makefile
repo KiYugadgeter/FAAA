@@ -1,5 +1,5 @@
 fsys: fsys.cpp fsys.hpp
-	clang++ -g -o fsys fsys.cpp
+	g++ -g -o fsys fsys.cpp
 
 fs: fs.nasm
 	nasm -o fs -f bin fs.nasm

@@ -305,23 +305,40 @@ void FAT16::set_cluster_num(uint16_t index, uint16_t num) {
 }
 
 
+int64_t FAT16::remove(char* path) {
+    unlink(path, NULL, true);
+}
 
 int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
+    if (!root) {
+        std::cout << "false call:" << path << std::endl;
+    }
     DirectoryEntry de;
     char filename[8];
     char suffix[3];
     uint8_t buf[32];
+    char* old_p;
     buf[0] = 0x01;
     uint64_t root_dir_pos = (bpb.sector_length * bpb.preserved_sectors) + bpb.fat_sectors * bpb.sector_length * bpb.fat_count;
     if (root && in_de == NULL) {
+        char* p = strtok(path, "/");
         int c = bpb.root_entry_count;
         for (int i = 0; i < c * 32; i+= 32) {
             fst.seekg(root_dir_pos + i);
             fst.read((char*)buf, 32);
             parse_directory_entry(buf, &de);
-            parse_path(path, filename, suffix);
+            parse_path(p, filename, suffix);
             if (memcmp(de.filename, filename, 8) == 0 && memcmp(de.suffix, suffix, 3) == 0) {
-                char* p = strtok(path, "/");
+                std::cout << "memcmp:" << memcmp(filename, de.filename, 8) << std::endl;
+                std::cout << "suffix:" << memcmp(de.suffix, suffix, 3) << std::endl;
+                std::cout << p << std::endl;
+                p = strtok(NULL, "/");
+                if (p == NULL) {
+                    std::cout << "p is NULL" << std::endl;
+                }
+                else {
+                    std::cout << "p is not NULL" << std::endl;
+                }
                 if (p == NULL) {
                     fst.seekg(root_dir_pos + i);
                     uint8_t a = 0;
@@ -330,11 +347,11 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
                     return 0;
                 }
                 else {
-                    unlink(p, &de, false);
+                    return unlink(p, &de, false);
                 }
             }
-            throw std::runtime_error("not such file or directory");
         }
+        throw std::runtime_error("not such file or directory in root");
     }
     else {
         parse_path(path, filename, suffix);
@@ -350,7 +367,7 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
                 }
                 parse_path(path, filename, suffix);
                 if (memcmp(de.filename, filename, 8) == 0 && memcmp(de.suffix, suffix, 3) == 0) {
-                    char* p = strtok(path, "/");
+                    char* p = strtok(NULL, "/");
                     if (p == NULL) {
                         fst.seekg(data_start + cluster_size * cluster_index + i);
                         int a = 0;
@@ -370,7 +387,7 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
                 cluster_index = get_next_cluster_num(cluster_index);
             }
             else {
-                throw std::runtime_error("not such file or directory");
+                throw std::runtime_error("not such file or directory: cluster has deleted");
             }
         }
 
@@ -378,12 +395,13 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
 }
 
 void FAT16::del_cluster_chain(int num) {
+    int del_sign = 0xffff;
     while (num != 0xffff) {
         uint16_t next_num;
         fst.seekg(fat_start + num*2);
         fst.read((char*)&next_num, 2);
         fst.seekg(fat_start+ num * 2);
-        fst.write((char*)0xffff, 2);
+        fst.write((char*)&del_sign, 2);
         num = next_num;
     }
 }
@@ -391,6 +409,7 @@ void FAT16::del_cluster_chain(int num) {
 int main() {
     std::shared_ptr<FAT16> p1(new FAT16("fs"));
     char *fname = strdup("/DIR1/TEXT2.TXT");
+    char *fname2 = strdup("/DIR1/TEXT2.TXT");
     FileHandle f = p1->open(fname);
     char t[7];
     f.read(t, 5);
@@ -399,5 +418,6 @@ int main() {
     char y[6];
     f.read(y, 3);
     std::cout << y << std::endl;
+    p1->remove(fname);
     delete fname;
 }

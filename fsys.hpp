@@ -90,6 +90,7 @@ class FAT16 {
         uint16_t get_next_cluster_num(uint16_t cluster_num);
         int64_t read_path(char* pathname, DirectoryEntry *de, uint32_t entry_count, DirectoryEntry *out, bool is_root);
         int64_t del(char* path);
+        int64_t remove(char* path);
     private:
         uint8_t directory_entry_buffer[32];
         void del_cluster_chain(int num);
