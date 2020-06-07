@@ -1,6 +1,14 @@
 #include "fsys.hpp"
 #include <cstdio>
 
+void putsn(char *s, int n) {
+    for (size_t i = 0; i < n; i++) {
+        std::cout << s[i];
+    }
+    std::cout << "\n";
+}
+
+
 FileHandle::FileHandle(DirectoryEntry dentry, FAT16* fat) : dentry(dentry), fat(fat), current_pos(0) {
     buf = new uint8_t[fat->bpb.sector_length * fat->bpb.cluster_length];
     current_cluster = dentry.head_cluster;
@@ -310,9 +318,8 @@ int64_t FAT16::remove(char* path) {
 }
 
 int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
-    if (!root) {
-        std::cout << "false call:" << path << std::endl;
-    }
+    std::cout << "passed path is:" <<  path << std::endl;
+    std::cout << "root" << root << std::endl;
     DirectoryEntry de;
     char filename[8];
     char suffix[3];
@@ -322,6 +329,7 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
     uint64_t root_dir_pos = (bpb.sector_length * bpb.preserved_sectors) + bpb.fat_sectors * bpb.sector_length * bpb.fat_count;
     if (root && in_de == NULL) {
         char* p = strtok(path, "/");
+        std::cout << "strtok with path" << std::endl;
         int c = bpb.root_entry_count;
         for (int i = 0; i < c * 32; i+= 32) {
             fst.seekg(root_dir_pos + i);
@@ -329,21 +337,15 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
             parse_directory_entry(buf, &de);
             parse_path(p, filename, suffix);
             if (memcmp(de.filename, filename, 8) == 0 && memcmp(de.suffix, suffix, 3) == 0) {
-                std::cout << "memcmp:" << memcmp(filename, de.filename, 8) << std::endl;
-                std::cout << "suffix:" << memcmp(de.suffix, suffix, 3) << std::endl;
                 std::cout << p << std::endl;
                 p = strtok(NULL, "/");
-                if (p == NULL) {
-                    std::cout << "p is NULL" << std::endl;
-                }
-                else {
-                    std::cout << "p is not NULL" << std::endl;
-                }
+                std::cout << "strtok without path" << std::endl;
                 if (p == NULL) {
                     fst.seekg(root_dir_pos + i);
                     uint8_t a = 0;
-                    fst.write((char*)&(a), 1);
+                    fst.write((char*)&a, 1);
                     del_cluster_chain(de.head_cluster);
+                    fst.close();
                     return 0;
                 }
                 else {
@@ -355,42 +357,40 @@ int64_t FAT16::unlink(char* path, DirectoryEntry* in_de, bool root) {
     }
     else {
         parse_path(path, filename, suffix);
+        std::cout << "path " << path << std::endl;
         uint16_t cluster_index = in_de->head_cluster;
         uint32_t cluster_size = bpb.sector_length * bpb.cluster_length;
         uint8_t cluster_buf[cluster_size];
-        while (*buf != 0x00) {
+        while (cluster_index != 0xffff) {
             read_cluster((char*)cluster_buf, cluster_index);
-            for (int i = 0; i < cluster_size; i += 32) {
-                parse_directory_entry(cluster_buf + i, &de);
-                if (de.filename[0] == 0x00) {
-                    break;
-                }
-                parse_path(path, filename, suffix);
-                if (memcmp(de.filename, filename, 8) == 0 && memcmp(de.suffix, suffix, 3) == 0) {
-                    char* p = strtok(NULL, "/");
-                    if (p == NULL) {
-                        fst.seekg(data_start + cluster_size * cluster_index + i);
-                        int a = 0;
+            for (int i = 0; i < cluster_size; i+=32) {
+                parse_directory_entry(cluster_buf+i, &de);
+                if (memcmp(filename, de.filename, 8) == 0 && memcmp(suffix, de.suffix, 3) == 0) {
+                    std::cout << "memcmp:" << memcmp(filename, de.filename, 8) << ", " << memcmp(suffix, de.suffix, 3) << std::endl;
+                    std::cout << "filename:";
+                    putsn(filename, 8);
+                    std::cout << "suffix:";
+                    putsn(suffix, 3);
+                    char* p = path;
+                    char* x = strtok(NULL, "/");
+                    if (x == NULL) {
+                        std::cout << "削除処理" << std::endl;
+                        // 削除処理
+                        fst.seekg(data_start + (cluster_size * (cluster_index-2)) + i);
+                        uint8_t a = 0;
+                        std::cout << "tellg:" << fst.tellg() << std::endl;
                         fst.write((char*)&a, 1);
                         del_cluster_chain(de.head_cluster);
                         return 0;
                     }
                     else {
-                        return unlink(p, &de, false);
+                        return unlink(x, &de, false);
                     }
                 }
-                else {
-                    throw std::runtime_error("not such file or directory");
-                }
             }
-            if (cluster_index != 0xff) {
-                cluster_index = get_next_cluster_num(cluster_index);
-            }
-            else {
-                throw std::runtime_error("not such file or directory: cluster has deleted");
-            }
+            cluster_index = get_next_cluster_num(cluster_index);
         }
-
+        std::cout << "not such file or directory" << std::endl;
     }
 }
 
@@ -408,16 +408,6 @@ void FAT16::del_cluster_chain(int num) {
 
 int main() {
     std::shared_ptr<FAT16> p1(new FAT16("fs"));
-    char *fname = strdup("/DIR1/TEXT2.TXT");
     char *fname2 = strdup("/DIR1/TEXT2.TXT");
-    FileHandle f = p1->open(fname);
-    char t[7];
-    f.read(t, 5);
-    std::cout << t << std::endl;
-    f.seekg(2);
-    char y[6];
-    f.read(y, 3);
-    std::cout << y << std::endl;
-    p1->remove(fname);
-    delete fname;
+    p1->remove(fname2);
 }
